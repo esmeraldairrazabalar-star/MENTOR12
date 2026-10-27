@@ -1,0 +1,28 @@
+rules_version='2';
+service cloud.firestore{match /databases/{d}/documents{
+ function ok(){return request.auth!=null}
+ function adminMail(){return request.auth.token.email in ['esmeraldairrazabalar@gmail.com','admin@mentorapp.com']}
+ function adm(){return ok()&&(adminMail()||(exists(/databases/$(d)/documents/users/$(request.auth.uid))&&get(/databases/$(d)/documents/users/$(request.auth.uid)).data.role=='admin'))}
+ function mem(){return request.auth.uid in resource.data.members}
+ match /users/{id}{allow read:if true;
+  allow create:if adm()||(ok()&&request.auth.uid==id&&request.resource.data.active==true&&(request.resource.data.role in ['student','mentor']||(request.resource.data.role=='admin'&&adminMail())));
+  allow update:if adm()||(request.auth.uid==id&&request.resource.data.role==resource.data.role&&request.resource.data.active==resource.data.active);
+  allow delete:if adm();}
+ match /requests/{id}{allow read:if adm()||(ok()&&mem());
+  allow create:if adm()||(ok()&&request.auth.uid==request.resource.data.student&&request.resource.data.status=='PENDIENTE');
+  allow update:if adm()||(ok()&&mem()&&(resource.data.mentor==request.auth.uid||request.resource.data.status==resource.data.status));
+  allow delete:if adm();}
+ match /chats/{id}{allow read,delete:if adm()||(ok()&&mem());allow create,update:if ok()&&request.auth.uid in request.resource.data.members;}
+ match /messages/{id}{allow read,update,delete:if adm()||(ok()&&mem());
+  allow create:if ok()&&request.resource.data.from==request.auth.uid&&request.auth.uid in request.resource.data.members;}
+ match /notifications/{id}{allow read,update:if adm()||(ok()&&resource.data.to==request.auth.uid);allow create:if ok();}
+ match /grades/{id}{allow read:if ok();
+  allow create,update:if ok()&&request.resource.data.mentor==request.auth.uid&&id==request.auth.uid+'_'+request.resource.data.student&&get(/databases/$(d)/documents/users/$(request.auth.uid)).data.role=='mentor';
+  allow delete:if adm();}
+ match /ratings/{id}{allow read:if ok();allow create,update:if ok()&&request.resource.data.student==request.auth.uid;}
+ match /help_posts/{id}{allow read:if ok();
+  allow create:if ok()&&request.resource.data.authorId==request.auth.uid;
+  allow update,delete:if adm()||(ok()&&(resource.data.authorId==request.auth.uid||request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies','solved'])));}
+ match /deletedUsers/{id}{allow read:if adm()||(ok()&&request.auth.uid==id);allow write:if adm();}
+ match /settings/{id}{allow read:if true;allow write:if adm();}
+}}
